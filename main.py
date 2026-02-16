@@ -92,7 +92,7 @@ def check_question(question: QuestionInput):
     
     best_match = None
     best_similarity = 0.0
-    threshold = 0.82  # Tune this. Start here, adjust based on results.
+    threshold = 0.75  # Tune this. Start here, adjust based on results.
     
     for row in rows:
         row_id, row_text, row_embedding_json, row_cluster_id = row
