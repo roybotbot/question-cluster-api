@@ -43,3 +43,12 @@ def get_db():
     conn.commit()
     return conn
 
+
+    def get_embedding(text: str) -> list[float]:
+        """Generate embedding via OpenAI API."""
+        response = client.embeddings.create(
+            input=text,
+            model="text-embedding-3-small"
+        )
+        return response.data[0].embedding
+    
