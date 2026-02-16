@@ -249,3 +249,24 @@ def reset_db():
     conn.commit()
     conn.close()
     return {"status": "cleared"}
+
+
+@app.post("/debug")
+def debug_similarity(question: QuestionInput):
+    """Debug endpoint: show similarity scores between a question and all stored questions."""
+    conn = get_db()
+    new_embedding = get_embedding(question.text)
+    rows = conn.execute(
+        "SELECT id, text, embedding FROM questions"
+    ).fetchall()
+    
+    results = []
+    for row in rows:
+        row_id, row_text, row_embedding_json = row
+        row_embedding = json.loads(row_embedding_json)
+        sim = cosine_similarity(new_embedding, row_embedding)
+        results.append({"id": row_id, "text": row_text, "similarity": round(sim, 4)})
+    
+    conn.close()
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return results
