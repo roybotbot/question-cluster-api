@@ -9,6 +9,9 @@ from pydantic import BaseModel
 from openai import OpenAI
 
 app = FastAPI()
+@app.get("/")
+def root():
+    return {"status": "running"}
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # SQLite setup - use Railway volume path if available, else local
