@@ -267,7 +267,3 @@ curl -X POST http://localhost:8000/debug \
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-**Built by Roy** | [GitHub](https://github.com/roybotbot) | Targeting knowledge management, enablement, and systems operations roles
