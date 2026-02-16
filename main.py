@@ -241,11 +241,11 @@ def health():
     return {"status": "ok"}
     
 @app.post("/reset")
-    def reset_db():
+def reset_db():
     """Resetting the database for testing."""
-        conn = get_db()
-        conn.execute("DELETE FROM questions")
-        conn.execute("DELETE FROM clusters")
-        conn.commit()
-        conn.close()
-        return {"status": "cleared"}
+    conn = get_db()
+    conn.execute("DELETE FROM questions")
+    conn.execute("DELETE FROM clusters")
+    conn.commit()
+    conn.close()
+    return {"status": "cleared"}
