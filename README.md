@@ -28,36 +28,55 @@ An automated system that:
 └────────┬────────┘
          │ message event
          ▼
-┌─────────────────┐
-│   n8n Workflow  │  (Railway)
-│  ┌───────────┐  │
-│  │ Trigger   │  │ ← Slack event subscriptions
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ IF(?)     │  │ ← Regex: questions only
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ HTTP POST │  │ ← /check endpoint
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ IF(≥3)    │  │ ← Cluster count threshold
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ LLM Draft │  │ ← OpenAI generates FAQ
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ Notion    │  │ ← Create page in FAQ database
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ Slack Msg │  │ ← Notify docs channel
-│  └───────────┘  │
-└─────────────────┘
+┌─────────────────────────────────────────────────┐
+│   n8n Workflow  (Railway)                       │
+│  ┌───────────┐                                  │
+│  │ Trigger   │  ← Slack event subscriptions     │
+│  └─────┬─────┘                                  │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ IF (Regex)    │  ← Basic filter: has "?" or  │
+│  └─────┬─────────┘    question words            │
+│        │                                         │
+│  ┌─────▼─────────────┐                          │
+│  │ LLM Filter        │  ← Anthropic Claude:     │
+│  │ (Anthropic)       │    "Is this a genuine    │
+│  └─────┬─────────────┘    question?"            │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ IF (yes?)     │  ← LLM response check        │
+│  └─────┬─────────┘                              │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ HTTP POST     │  ← /check endpoint           │
+│  └─────┬─────────┘                              │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ IF (≥3 && not │  ← Cluster threshold +       │
+│  │  drafted?)    │    draft prevention          │
+│  └─────┬─────────┘                              │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ LLM Draft FAQ │  ← Anthropic Claude:         │
+│  │ (Anthropic)   │    generate FAQ entry        │
+│  └─────┬─────────┘                              │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ Code (parse)  │  ← Extract Question/Answer   │
+│  └─────┬─────────┘                              │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ Notion        │  ← Create page in FAQ DB     │
+│  └─────┬─────────┘                              │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ HTTP POST     │  ← /mark-drafted endpoint    │
+│  └─────┬─────────┘                              │
+│        │                                         │
+│  ┌─────▼─────────┐                              │
+│  │ Slack Message │  ← Notify docs channel       │
+│  └───────────────┘                              │
+└─────────────────────────────────────────────────┘
          │
          │ POST /check
          ▼
@@ -84,24 +103,41 @@ An automated system that:
 
 ## Key Design Decisions
 
-### 1. Embedding Model: OpenAI `text-embedding-3-small`
-- **Why:** Good balance of performance (1536 dimensions) and cost
+### 1. Two-Stage Question Filtering
+- **Stage 1 (Regex):** Fast pattern matching for obvious questions (`?` or question words like "how", "what", "where")
+- **Stage 2 (LLM - Anthropic Claude):** Semantic analysis to filter out:
+  - Rhetorical questions ("Why is this so hard???")
+  - Greetings ("How are you?")
+  - Time-sensitive queries ("What time is the meeting?")
+  - Vague requests ("Can someone help me?")
+- **Why:** Reduces API costs by filtering 90% of non-questions with cheap regex before using LLM
+- **Trade-off:** Adds ~1-2 seconds latency per message, but ensures only genuine FAQ-worthy questions are clustered
+
+### 2. LLM Choice: Anthropic Claude vs OpenAI GPT
+- **Why Claude:** More reliable at following strict formatting instructions (Question: / Answer: structure)
+- **Experience:** OpenAI models (GPT-4o-mini, GPT-3.5-turbo) produced inconsistent or empty outputs with structured prompts
+- **Use cases:** Claude handles both question filtering and FAQ draft generation
+
+### 3. Embedding Model: OpenAI `text-embedding-3-small`
+- **Why:** Good balance of performance (1536 dimensions) and cost ($0.02 per 1M tokens)
 - **Alternatives considered:** `text-embedding-3-large` (higher accuracy but 3x cost), Sentence-BERT (self-hosted but more complex)
 
-### 2. Similarity Metric: Cosine Similarity
+### 4. Similarity Metric: Cosine Similarity
 - **Why:** Standard for embedding comparison, robust to question length variations
 - **Threshold:** 0.70 (empirically tuned, see [TUNING_LOG.md](TUNING_LOG.md))
+- **Rationale:** Paraphrased questions score 0.70-0.75, different topics score <0.55
 
-### 3. Clustering Logic: Incremental
+### 5. Clustering Logic: Incremental
 - **Why:** Real-time clustering as questions arrive (vs. batch processing)
 - **Trade-off:** Simpler to implement, but doesn't handle cluster merging or splitting
 
-### 4. Storage: SQLite on Railway Volume
+### 6. Storage: SQLite on Railway Volume
 - **Why:** Simple, serverless-friendly, sufficient for moderate scale (<10K questions)
 - **Limitations:** No built-in vector search (could migrate to PostgreSQL with pgvector for larger scale)
 
-### 5. FAQ Trigger Threshold: 3 occurrences
+### 7. FAQ Trigger Threshold: 3 occurrences
 - **Why:** Balances noise reduction (not every question) with timeliness (catches real patterns quickly)
+- **Draft Prevention:** After first FAQ is created, cluster is marked `faq_drafted: true` to prevent duplicates
 - **Configurable:** Can be adjusted based on channel activity
 
 ## API Endpoints
@@ -150,13 +186,24 @@ Response:
 - **Hosting:** Railway (Docker)
 - **Database:** SQLite (volume-mounted at `/data`)
 - **Workflow:** n8n (also on Railway)
+- **LLM:** Anthropic Claude (question filtering + FAQ drafting)
+- **Embeddings:** OpenAI text-embedding-3-small
 
 ### Environment Variables
+
+**Python API Service:**
 | Variable | Description |
 |----------|-------------|
 | `OPENAI_API_KEY` | OpenAI API key for embeddings |
 | `DB_PATH` | Database file path (default: `/data/questions.db`) |
 | `PORT` | Auto-assigned by Railway |
+
+**n8n Service:**
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude LLM nodes |
+| `SLACK_BOT_TOKEN` | Slack bot token for event subscriptions |
+| `NOTION_API_KEY` | Notion integration token |
 
 ### Local Development
 ```bash
@@ -180,10 +227,13 @@ uvicorn main:app --reload --port 8000
 ### Current Limitations
 1. **No cluster merging** - If similar questions are added before threshold is reached, they may form separate clusters
 2. **No multi-language support** - Embeddings are English-optimized
-3. **No duplicate prevention** - Same exact question from same user can inflate cluster count
-4. **No auth** - `/reset` and `/debug` endpoints are public (dev only)
+3. **No user deduplication** - Same exact question from same user can inflate cluster count
+4. **Partial draft prevention** - `/mark-drafted` endpoint exists but API doesn't return `faq_drafted` status yet
+5. **No auth** - `/reset` and `/debug` endpoints are public (dev only)
+6. **LLM filtering adds latency** - ~1-2 seconds per message for Claude API call
 
 ### Potential Enhancements
+- [ ] Complete draft prevention loop (return `faq_drafted` in `/check` response, check in n8n IF node)
 - [ ] Add user deduplication (don't count same user asking same question twice)
 - [ ] Implement cluster merging (periodic job to merge high-similarity clusters)
 - [ ] Add authentication for admin endpoints
@@ -191,6 +241,8 @@ uvicorn main:app --reload --port 8000
 - [ ] Add analytics dashboard (cluster trends, top questions, response times)
 - [ ] Support multi-language questions (use multilingual embedding models)
 - [ ] Add feedback loop (mark drafted FAQs as "helpful" or "not helpful")
+- [ ] Cache LLM filter results to reduce API costs for repeated message patterns
+- [ ] Add confidence scores to LLM filter (not just yes/no, but 0-100% confidence)
 
 ## Testing
 
