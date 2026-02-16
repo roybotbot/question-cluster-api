@@ -47,195 +47,195 @@ def get_db():
     return conn
 
 
-    def get_embedding(text: str) -> list[float]:
-        """Generate embedding via OpenAI API."""
-        response = client.embeddings.create(
-            input=text,
-            model="text-embedding-3-small"
+def get_embedding(text: str) -> list[float]:
+    """Generate embedding via OpenAI API."""
+    response = client.embeddings.create(
+        input=text,
+        model="text-embedding-3-small"
+    )
+    return response.data[0].embedding
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Compute cosine similarity between two vectors."""
+    a = np.array(a)
+    b = np.array(b)
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+
+class QuestionInput(BaseModel):
+    text: str
+    topic: str | None = None
+    source_channel: str | None = None
+    source_user: str | None = None
+
+
+class QuestionResponse(BaseModel):
+    status: str  # "new" or "matched"
+    cluster_id: int
+    cluster_count: int
+    similar_questions: list[str]
+
+
+@app.post("/check", response_model=QuestionResponse)
+def check_question(question: QuestionInput):
+    """Check if a question matches an existing cluster."""
+    conn = get_db()
+    
+    # Generate embedding for the new question
+    new_embedding = get_embedding(question.text)
+    
+    # Get all existing questions with embeddings
+    rows = conn.execute(
+        "SELECT id, text, embedding, cluster_id FROM questions"
+    ).fetchall()
+    
+    best_match = None
+    best_similarity = 0.0
+    threshold = 0.82  # Tune this. Start here, adjust based on results.
+    
+    for row in rows:
+        row_id, row_text, row_embedding_json, row_cluster_id = row
+        row_embedding = json.loads(row_embedding_json)
+        sim = cosine_similarity(new_embedding, row_embedding)
+        
+        if sim > best_similarity and sim >= threshold:
+            best_similarity = sim
+            best_match = {
+                "id": row_id,
+                "text": row_text,
+                "cluster_id": row_cluster_id
+            }
+    
+    if best_match and best_match["cluster_id"]:
+        # Matched to existing cluster
+        cluster_id = best_match["cluster_id"]
+        
+        # Insert the new question into the same cluster
+        conn.execute(
+            """INSERT INTO questions (text, topic, embedding, cluster_id, 
+               source_channel, source_user) VALUES (?, ?, ?, ?, ?, ?)""",
+            (question.text, question.topic, json.dumps(new_embedding),
+             cluster_id, question.source_channel, question.source_user)
         )
-        return response.data[0].embedding
-    
-    
-    def cosine_similarity(a: list[float], b: list[float]) -> float:
-        """Compute cosine similarity between two vectors."""
-        a = np.array(a)
-        b = np.array(b)
-        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-    
-    
-    class QuestionInput(BaseModel):
-        text: str
-        topic: str | None = None
-        source_channel: str | None = None
-        source_user: str | None = None
-    
-    
-    class QuestionResponse(BaseModel):
-        status: str  # "new" or "matched"
-        cluster_id: int
-        cluster_count: int
-        similar_questions: list[str]
-    
-    
-    @app.post("/check", response_model=QuestionResponse)
-    def check_question(question: QuestionInput):
-        """Check if a question matches an existing cluster."""
-        conn = get_db()
         
-        # Generate embedding for the new question
-        new_embedding = get_embedding(question.text)
+        # Update cluster count and timestamp
+        conn.execute(
+            """UPDATE clusters SET count = count + 1, 
+               updated_at = ? WHERE id = ?""",
+            (datetime.utcnow().isoformat(), cluster_id)
+        )
+        conn.commit()
         
-        # Get all existing questions with embeddings
-        rows = conn.execute(
-            "SELECT id, text, embedding, cluster_id FROM questions"
+        # Get cluster info
+        cluster = conn.execute(
+            "SELECT count FROM clusters WHERE id = ?", (cluster_id,)
+        ).fetchone()
+        
+        similar = conn.execute(
+            "SELECT text FROM questions WHERE cluster_id = ?", (cluster_id,)
         ).fetchall()
-        
-        best_match = None
-        best_similarity = 0.0
-        threshold = 0.82  # Tune this. Start here, adjust based on results.
-        
-        for row in rows:
-            row_id, row_text, row_embedding_json, row_cluster_id = row
-            row_embedding = json.loads(row_embedding_json)
-            sim = cosine_similarity(new_embedding, row_embedding)
-            
-            if sim > best_similarity and sim >= threshold:
-                best_similarity = sim
-                best_match = {
-                    "id": row_id,
-                    "text": row_text,
-                    "cluster_id": row_cluster_id
-                }
-        
-        if best_match and best_match["cluster_id"]:
-            # Matched to existing cluster
-            cluster_id = best_match["cluster_id"]
-            
-            # Insert the new question into the same cluster
-            conn.execute(
-                """INSERT INTO questions (text, topic, embedding, cluster_id, 
-                   source_channel, source_user) VALUES (?, ?, ?, ?, ?, ?)""",
-                (question.text, question.topic, json.dumps(new_embedding),
-                 cluster_id, question.source_channel, question.source_user)
-            )
-            
-            # Update cluster count and timestamp
-            conn.execute(
-                """UPDATE clusters SET count = count + 1, 
-                   updated_at = ? WHERE id = ?""",
-                (datetime.utcnow().isoformat(), cluster_id)
-            )
-            conn.commit()
-            
-            # Get cluster info
-            cluster = conn.execute(
-                "SELECT count FROM clusters WHERE id = ?", (cluster_id,)
-            ).fetchone()
-            
-            similar = conn.execute(
-                "SELECT text FROM questions WHERE cluster_id = ?", (cluster_id,)
-            ).fetchall()
-            
-            conn.close()
-            return QuestionResponse(
-                status="matched",
-                cluster_id=cluster_id,
-                cluster_count=cluster[0],
-                similar_questions=[r[0] for r in similar]
-            )
-        
-        elif best_match and not best_match["cluster_id"]:
-            # Matched to a question that doesn't have a cluster yet.
-            # Create a new cluster for both questions.
-            cursor = conn.execute(
-                """INSERT INTO clusters (topic, count, created_at, updated_at) 
-                   VALUES (?, 2, ?, ?)""",
-                (question.topic, datetime.utcnow().isoformat(),
-                 datetime.utcnow().isoformat())
-            )
-            cluster_id = cursor.lastrowid
-            
-            # Assign cluster to the matched question
-            conn.execute(
-                "UPDATE questions SET cluster_id = ? WHERE id = ?",
-                (cluster_id, best_match["id"])
-            )
-            
-            # Insert the new question with the cluster
-            conn.execute(
-                """INSERT INTO questions (text, topic, embedding, cluster_id, 
-                   source_channel, source_user) VALUES (?, ?, ?, ?, ?, ?)""",
-                (question.text, question.topic, json.dumps(new_embedding),
-                 cluster_id, question.source_channel, question.source_user)
-            )
-            conn.commit()
-            
-            similar = [best_match["text"], question.text]
-            conn.close()
-            return QuestionResponse(
-                status="matched",
-                cluster_id=cluster_id,
-                cluster_count=2,
-                similar_questions=similar
-            )
-        
-        else:
-            # No match. Store as standalone question.
-            conn.execute(
-                """INSERT INTO questions (text, topic, embedding, cluster_id, 
-                   source_channel, source_user) VALUES (?, ?, ?, ?, ?, ?)""",
-                (question.text, question.topic, json.dumps(new_embedding),
-                 None, question.source_channel, question.source_user)
-            )
-            conn.commit()
-            conn.close()
-            return QuestionResponse(
-                status="new",
-                cluster_id=0,
-                cluster_count=0,
-                similar_questions=[]
-            )
-    
-    
-    @app.get("/clusters")
-    def list_clusters():
-        """List all clusters with their questions. Useful for debugging."""
-        conn = get_db()
-        clusters = conn.execute(
-            "SELECT id, topic, count, faq_drafted, created_at FROM clusters ORDER BY count DESC"
-        ).fetchall()
-        
-        result = []
-        for c in clusters:
-            questions = conn.execute(
-                "SELECT text, created_at FROM questions WHERE cluster_id = ?",
-                (c[0],)
-            ).fetchall()
-            result.append({
-                "cluster_id": c[0],
-                "topic": c[1],
-                "count": c[2],
-                "faq_drafted": bool(c[3]),
-                "created_at": c[4],
-                "questions": [{"text": q[0], "created_at": q[1]} for q in questions]
-            })
         
         conn.close()
-        return result
+        return QuestionResponse(
+            status="matched",
+            cluster_id=cluster_id,
+            cluster_count=cluster[0],
+            similar_questions=[r[0] for r in similar]
+        )
     
-    
-    @app.post("/clusters/{cluster_id}/mark-drafted")
-    def mark_drafted(cluster_id: int):
-        """Mark a cluster as having had its FAQ drafted. Prevents re-triggering."""
-        conn = get_db()
+    elif best_match and not best_match["cluster_id"]:
+        # Matched to a question that doesn't have a cluster yet.
+        # Create a new cluster for both questions.
+        cursor = conn.execute(
+            """INSERT INTO clusters (topic, count, created_at, updated_at) 
+               VALUES (?, 2, ?, ?)""",
+            (question.topic, datetime.utcnow().isoformat(),
+             datetime.utcnow().isoformat())
+        )
+        cluster_id = cursor.lastrowid
+        
+        # Assign cluster to the matched question
         conn.execute(
-            "UPDATE clusters SET faq_drafted = 1 WHERE id = ?", (cluster_id,)
+            "UPDATE questions SET cluster_id = ? WHERE id = ?",
+            (cluster_id, best_match["id"])
+        )
+        
+        # Insert the new question with the cluster
+        conn.execute(
+            """INSERT INTO questions (text, topic, embedding, cluster_id, 
+               source_channel, source_user) VALUES (?, ?, ?, ?, ?, ?)""",
+            (question.text, question.topic, json.dumps(new_embedding),
+             cluster_id, question.source_channel, question.source_user)
+        )
+        conn.commit()
+        
+        similar = [best_match["text"], question.text]
+        conn.close()
+        return QuestionResponse(
+            status="matched",
+            cluster_id=cluster_id,
+            cluster_count=2,
+            similar_questions=similar
+        )
+    
+    else:
+        # No match. Store as standalone question.
+        conn.execute(
+            """INSERT INTO questions (text, topic, embedding, cluster_id, 
+               source_channel, source_user) VALUES (?, ?, ?, ?, ?, ?)""",
+            (question.text, question.topic, json.dumps(new_embedding),
+             None, question.source_channel, question.source_user)
         )
         conn.commit()
         conn.close()
-        return {"status": "ok"}
+        return QuestionResponse(
+            status="new",
+            cluster_id=0,
+            cluster_count=0,
+            similar_questions=[]
+        )
+
+
+@app.get("/clusters")
+def list_clusters():
+    """List all clusters with their questions. Useful for debugging."""
+    conn = get_db()
+    clusters = conn.execute(
+        "SELECT id, topic, count, faq_drafted, created_at FROM clusters ORDER BY count DESC"
+    ).fetchall()
     
+    result = []
+    for c in clusters:
+        questions = conn.execute(
+            "SELECT text, created_at FROM questions WHERE cluster_id = ?",
+            (c[0],)
+        ).fetchall()
+        result.append({
+            "cluster_id": c[0],
+            "topic": c[1],
+            "count": c[2],
+            "faq_drafted": bool(c[3]),
+            "created_at": c[4],
+            "questions": [{"text": q[0], "created_at": q[1]} for q in questions]
+        })
     
-    @app.get("/health")
-    def health():
-        return {"status": "ok"}
+    conn.close()
+    return result
+
+
+@app.post("/clusters/{cluster_id}/mark-drafted")
+def mark_drafted(cluster_id: int):
+    """Mark a cluster as having had its FAQ drafted. Prevents re-triggering."""
+    conn = get_db()
+    conn.execute(
+        "UPDATE clusters SET faq_drafted = 1 WHERE id = ?", (cluster_id,)
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
