@@ -1,0 +1,552 @@
+{
+  "name": "Question Cluster",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4131adf9-9ce4-4531-bcfa-23ff0990f5a2",
+              "leftValue": "={{ $json.text.includes('?') || /^(how|what|where|when|why|who|can|does|is|are|do|should|could|would)\\b/i.test($json.text) }}",
+              "rightValue": "T",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -352,
+        352
+      ],
+      "id": "74c76e26-79fa-4f4b-a9ab-f487c6ff06d0",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "trigger": [
+          "message"
+        ],
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-channel"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        352
+      ],
+      "id": "009dcada-4957-4971-9f72-7ca1d2071e62",
+      "name": "Slack Trigger",
+      "webhookId": "",
+      "credentials": {
+        "slackApi": {
+          "id": "",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-channel"
+        },
+        "text": "=New repeated question detected (asked {{ $json.cluster_count }}x):\n\n*{{ $json.faq_question }}*\n\nDraft FAQ created in Notion.\nStatus: Needs Review",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1696,
+        352
+      ],
+      "id": "0b4c33ac-d0c5-40ef-b6fc-44dea30ea46f",
+      "name": "Send a message",
+      "webhookId": "",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-5-20250929",
+          "cachedResultName": "Claude Sonnet 4.5"
+        },
+        "options": {
+          "maxTokensToSample": 100
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        768,
+        544
+      ],
+      "id": "179707c2-931f-4703-9e6b-1caf2de1f0b2",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "   // Claude outputs to 'output' or 'text' property\n   const inputJson = $input.first().json;\n   const content = inputJson.output || inputJson.text;\n\n   if (!content) {\n     throw new Error('LLM output is empty. Available keys: ' + Object.keys(inputJson).join(', '));\n   }\n\n   const clusterData = $('Cluster-Check').first().json;\n\n   const questionMatch = content.match(/Question:\\s*(.+)/);\n   const answerMatch = content.match(/Answer:\\s*([\\s\\S]+)/);\n\n   return [{\n     json: {\n       faq_question: questionMatch ? questionMatch[1].trim() : 'Could not parse question',\n       faq_answer: answerMatch ? answerMatch[1].trim() : 'Could not parse answer',\n       cluster_id: clusterData.cluster_id,\n       cluster_count: clusterData.cluster_count,\n       similar_questions: clusterData.similar_questions,\n       source_channel: $('Slack Trigger').first().json.channel\n     }\n   }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        352
+      ],
+      "id": "17f749b5-2506-41e3-a6e4-ebc00c43b44f",
+      "name": "Output-Format"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-5-20250929",
+          "cachedResultName": "Claude Sonnet 4.5"
+        },
+        "options": {
+          "maxTokensToSample": 100
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        -176,
+        544
+      ],
+      "id": "29f5e166-8378-405f-983f-1f2323d00c90",
+      "name": "Anthropic Chat Model1",
+      "credentials": {
+        "anthropicApi": {
+          "id": "",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# Filtering",
+        "height": 544,
+        "width": 736
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -400,
+        176
+      ],
+      "typeVersion": 1,
+      "id": "e2e38d43-c7dc-4d32-94bd-1aa49276a28f",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "# Answering",
+        "height": 544,
+        "width": 672,
+        "color": "#401E00"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        352,
+        176
+      ],
+      "typeVersion": 1,
+      "id": "0a7e95a1-0360-49ee-b35d-932132f84fbc",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "# Document",
+        "height": 544,
+        "width": 592,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1040,
+        176
+      ],
+      "typeVersion": 1,
+      "id": "ded1a79c-342b-4d2b-873b-a925f2125742",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=   Analyze this Slack message and determine if it's a genuine question that should be added to an FAQ.\n\n   Message: {{ $json.text }}\n\n   A genuine question is:\n   - Asking for information, help, or instructions\n   - Not rhetorical or sarcastic\n   - Not a greeting like \"How are you?\"\n\n   Respond with ONLY one word: \"yes\" or \"no\"",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "="
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -176,
+        352
+      ],
+      "id": "6f25a364-43fb-4dd8-a712-1827c16a8c27",
+      "name": "LLM-Question-Filter"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=  You are an internal FAQ writer for a company with the following systems:\n\n   - VPN: Cisco AnyConnect, downloaded from it.company.com/vpn, requires Okta MFA\n   - PTO: Requested through BambooHR under Time Off > Request Time Off, needs manager approval, 2 weeks notice\n   - Expenses: Filed through Expensify, receipts required over $25, submit within 30 days, reimbursement in 5-7 business days\n   - Passwords: Self-service reset through Okta at company.okta.com, or ask IT in #it-help\n   - Printers: Managed by PaperCut, add via print.internal.company.com, for jams power cycle and clear trays, persistent issues go to #facilities\n   - SSO: All apps use Okta SSO\n   - Communication: Slack, Google Meet, Gmail\n   - Docs: Notion\n\n   The following question has been asked {{ $json.cluster_count }} times in our Slack channel:\n\n   Variations:\n   {{ $json.similar_questions.join('\\n') }}\n\n   Draft a concise FAQ entry using the company context above. Format:\n\n   Question: [single clear question]\n   Answer: [2-3 sentence answer using the specific tools and steps from the company context above]\n\n   If the question doesn't match any known system, write a general answer and note which team to contact for more details.",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "="
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        768,
+        352
+      ],
+      "id": "9eea26a6-da97-4366-81e6-0c119b6550f2",
+      "name": "LLM-Write-FAQ"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://question-cluster-api-production.up.railway.app/check",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"{{ $('Slack Trigger').item.json.text }}\",\n  \"source_channel\": \"{{ $('Slack Trigger').item.json.channel }}\",\n  \"source_user\": \"{{ $('Slack Trigger').item.json.user }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        352
+      ],
+      "id": "b70736c5-8dc2-41f0-90ce-645d8ac23bee",
+      "name": "Cluster-Check"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://question-cluster-api-production.up.railway.app/clusters/' + $('Output-Format').first().json.cluster_id + '/mark-drafted' }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1488,
+        352
+      ],
+      "id": "b012a754-b398-45e1-8b26-edb8d48569de",
+      "name": "Mark-Drafted"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f4d4035d-1366-4309-bd1c-cb4f95aab5ec",
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        128,
+        352
+      ],
+      "id": "1de45e9a-d8c7-473b-8fd0-b433dd37ec09",
+      "name": "lf1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "35179e2e-a6e4-4ef9-98fb-9b4ca3f390ca",
+              "leftValue": "={{ $json.cluster_count }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "1c1fd251-0869-494f-a4d9-3322550b30db",
+              "leftValue": "={{ $json.faq_drafted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        592,
+        352
+      ],
+      "id": "77dea3fa-ce43-424a-90ec-4d8e2d3247c1",
+      "name": "lf2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2025-09-03"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=   {\n     \"parent\": {\n       \"database_id\": \"YOUR_NOTION_DATABASE_ID\"\n     },\n     \"properties\": {\n       \"Title\": {\n         \"title\": [\n           {\n             \"text\": {\n               \"content\": \"{{ $json.faq_question }}\"\n             }\n           }\n         ]\n       },\n       \"Auto-Generated\": {\n         \"checkbox\": true\n       },\n       \"Cluster Count\": {\n         \"number\": {{ $json.cluster_count }}\n       },\n       \"Source Channel\": {\n         \"rich_text\": [\n           {\n             \"text\": {\n               \"content\": \"{{ $json.source_channel }}\"\n             }\n           }\n         ]\n       },\n       \"Status\": {\n         \"select\": {\n           \"name\": \"Needs Review\"\n         }\n       }\n     },\n     \"children\": [\n       {\n         \"object\": \"block\",\n         \"type\": \"paragraph\",\n         \"paragraph\": {\n           \"rich_text\": [\n             {\n               \"text\": {\n                 \"content\": \"{{ $json.faq_answer }}\"\n               }\n             }\n           ]\n         }\n       }\n     ]\n   }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1280,
+        352
+      ],
+      "id": "13fa2f53-e460-4be0-b9b4-02822fb1294e",
+      "name": "HTTP Request",
+      "credentials": {
+        "notionOAuth2Api": {
+          "id": "",
+          "name": "Notion account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Slack Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "LLM-Question-Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LLM-Write-FAQ",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output-Format": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LLM-Question-Filter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM-Question-Filter": {
+      "main": [
+        [
+          {
+            "node": "lf1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM-Write-FAQ": {
+      "main": [
+        [
+          {
+            "node": "Output-Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cluster-Check": {
+      "main": [
+        [
+          {
+            "node": "lf2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark-Drafted": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "lf1": {
+      "main": [
+        [
+          {
+            "node": "Cluster-Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "lf2": {
+      "main": [
+        [
+          {
+            "node": "LLM-Write-FAQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Mark-Drafted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "availableInMCP": false
+  },
+  "versionId": "",
+  "meta": {
+    "templateId": "ready-to-run-ai-workflow",
+    "templateCredsSetupCompleted": true,
+    "instanceId": ""
+  },
+  "id": "",
+  "tags": []
+}
