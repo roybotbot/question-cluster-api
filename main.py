@@ -4,7 +4,7 @@ import sqlite3
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel
 from openai import OpenAI
 
@@ -13,6 +13,12 @@ app = FastAPI()
 def root():
     return {"status": "running"}
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY")
+
+
+def verify_admin_key(x_api_key: str = Header()):
+    if not ADMIN_API_KEY or x_api_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
 
 # SQLite setup - use Railway volume path if available, else local
 DB_PATH = os.environ.get("DB_PATH", "/data/questions.db")
@@ -242,7 +248,7 @@ def mark_drafted(cluster_id: int):
 def health():
     return {"status": "ok"}
     
-@app.post("/reset")
+@app.post("/reset", dependencies=[Depends(verify_admin_key)])
 def reset_db():
     """Resetting the database for testing."""
     conn = get_db()
@@ -253,7 +259,7 @@ def reset_db():
     return {"status": "cleared"}
 
 
-@app.post("/debug")
+@app.post("/debug", dependencies=[Depends(verify_admin_key)])
 def debug_similarity(question: QuestionInput):
     """Debug endpoint: show similarity scores between a question and all stored questions."""
     conn = get_db()
