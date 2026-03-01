@@ -243,9 +243,9 @@ For small-scale personal use (<100 questions), the n8n-only approach is viable a
 1. **No cluster merging** - If similar questions are added before threshold is reached, they may form separate clusters
 2. **No multi-language support** - Embeddings are English-optimized
 3. **No user deduplication** - Same exact question from same user can inflate cluster count
-4. **Partial draft prevention** - `/mark-drafted` endpoint exists but API doesn't return `faq_drafted` status yet
-5. **No auth** - `/reset` and `/debug` endpoints are public (dev only)
-6. **LLM filtering adds latency** - ~1-2 seconds per message for Claude API call
+4. **No auth** - `/reset` and `/debug` endpoints are public (dev only)
+5. **LLM filtering adds latency** - ~1-2 seconds per message for Claude API call
+6. **n8n Notion node incompatibility** - n8n's built-in Notion node hasn't been updated for the Notion API 2025-09-03 version. Worked around this by using an HTTP Request node that calls the Notion API directly with the correct `Notion-Version` header
 
 ### Potential Enhancements
 - [ ] Complete draft prevention loop (return `faq_drafted` in `/check` response, check in n8n IF node)
