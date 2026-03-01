@@ -149,8 +149,8 @@ An automated system that:
 | `POST` | `/check` | Cluster a new question | ✅ Live |
 | `GET` | `/clusters` | List all clusters | ✅ Live |
 | `POST` | `/clusters/{id}/mark-drafted` | Mark FAQ as drafted | ✅ Live |
-| `POST` | `/reset` | Clear database (testing only) | ⚠️ Dev only |
-| `POST` | `/debug` | Inspect similarity scores | ⚠️ Dev only |
+| `POST` | `/reset` | Clear database (testing only) | 🔒 Requires API key |
+| `POST` | `/debug` | Inspect similarity scores | 🔒 Requires API key |
 
 **Production URL:** `https://question-cluster-api-production.up.railway.app`
 
@@ -197,6 +197,7 @@ Response:
 | `OPENAI_API_KEY` | OpenAI API key for embeddings |
 | `DB_PATH` | Database file path (default: `/data/questions.db`) |
 | `PORT` | Auto-assigned by Railway |
+| `ADMIN_API_KEY` | API key for protected endpoints (`/reset`, `/debug`) |
 
 **n8n Service:**
 | Variable | Description |
@@ -243,7 +244,7 @@ For small-scale personal use (<100 questions), the n8n-only approach is viable a
 1. **No cluster merging** - If similar questions are added before threshold is reached, they may form separate clusters
 2. **No multi-language support** - Embeddings are English-optimized
 3. **No user deduplication** - Same exact question from same user can inflate cluster count
-4. **No auth** - `/reset` and `/debug` endpoints are public (dev only)
+4. **Basic auth only** - `/reset` and `/debug` endpoints are protected by a single API key (no role-based access)
 5. **LLM filtering adds latency** - ~1-2 seconds per message for Claude API call
 6. **n8n Notion node incompatibility** - n8n's built-in Notion node hasn't been updated for the Notion API 2025-09-03 version. Worked around this by using an HTTP Request node that calls the Notion API directly with the correct `Notion-Version` header
 
