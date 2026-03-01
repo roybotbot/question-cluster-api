@@ -21,84 +21,51 @@ An automated system that:
 
 ## Architecture
 
-```
-┌─────────────────┐
-│  Slack Channel  │
-│   (Monitored)   │
-└────────┬────────┘
-         │ message event
-         ▼
-┌─────────────────────────────────────────────────┐
-│   n8n Workflow  (Railway)                       │
-│  ┌───────────┐                                  │
-│  │ Trigger   │  ← Slack event subscriptions     │
-│  └─────┬─────┘                                  │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ IF (Regex)    │  ← Basic filter: has "?" or  │
-│  └─────┬─────────┘    question words            │
-│        │                                         │
-│  ┌─────▼─────────────┐                          │
-│  │ LLM Filter        │  ← Anthropic Claude:     │
-│  │ (Anthropic)       │    "Is this a genuine    │
-│  └─────┬─────────────┘    question?"            │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ IF (yes?)     │  ← LLM response check        │
-│  └─────┬─────────┘                              │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ HTTP POST     │  ← /check endpoint           │
-│  └─────┬─────────┘                              │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ IF (≥3 && not │  ← Cluster threshold +       │
-│  │  drafted?)    │    draft prevention          │
-│  └─────┬─────────┘                              │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ LLM Draft FAQ │  ← Anthropic Claude:         │
-│  │ (Anthropic)   │    generate FAQ entry        │
-│  └─────┬─────────┘                              │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ Code (parse)  │  ← Extract Question/Answer   │
-│  └─────┬─────────┘                              │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ Notion        │  ← Create page in FAQ DB     │
-│  └─────┬─────────┘                              │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ HTTP POST     │  ← /mark-drafted endpoint    │
-│  └─────┬─────────┘                              │
-│        │                                         │
-│  ┌─────▼─────────┐                              │
-│  │ Slack Message │  ← Notify docs channel       │
-│  └───────────────┘                              │
-└─────────────────────────────────────────────────┘
-         │
-         │ POST /check
-         ▼
-┌─────────────────┐
-│  Python API     │  (Railway)
-│  FastAPI        │
-│  ┌───────────┐  │
-│  │ Embedding │  │ ← OpenAI text-embedding-3-small
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ Similarity│  │ ← Cosine similarity (threshold: 0.70)
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ Cluster   │  │ ← Assign to cluster or create new
-│  └─────┬─────┘  │
-│        │        │
-│  ┌─────▼─────┐  │
-│  │ SQLite    │  │ ← Persistent storage (Railway volume)
-│  └───────────┘  │
-└─────────────────┘
+```mermaid
+flowchart TD
+    subgraph Slack
+        A[Slack Channel]
+    end
+
+    subgraph n8n["n8n Workflow (Railway)"]
+        B[Slack Trigger]
+        C{Regex Filter\nhas '?' or question words}
+        D[LLM Question Filter\nAnthropic Claude]
+        E{Genuine question?}
+        F[Cluster-Check\nPOST /check]
+        G{count ≥ 3 AND\nnot yet drafted?}
+        H[LLM FAQ Drafter\nAnthropic Claude]
+        I[Output-Format\nparse Question/Answer]
+        J[Notion API\nHTTP Request — create page]
+        K[Mark-Drafted\nPOST /mark-drafted]
+        L[Slack Notification]
+    end
+
+    subgraph API["Python API (Railway)"]
+        M[Generate Embedding\nOpenAI text-embedding-3-small]
+        N[Cosine Similarity\nthreshold: 0.70]
+        O[Cluster Assignment]
+        P[(SQLite\nRailway Volume)]
+    end
+
+    A -->|message event| B
+    B --> C
+    C -->|yes| D
+    C -->|no| X1[discard]
+    D --> E
+    E -->|yes| F
+    E -->|no| X2[discard]
+    F <-->|POST /check| M
+    M --> N
+    N --> O
+    O --> P
+    F --> G
+    G -->|yes| H
+    G -->|no| X3[store only]
+    H --> I
+    I --> J
+    J --> K
+    K --> L
 ```
 
 ## Key Design Decisions
