@@ -222,6 +222,21 @@ export DB_PATH="./questions.db"
 uvicorn main:app --reload --port 8000
 ```
 
+## Why a Separate Python API?
+
+n8n's built-in Data Tables could handle storage and eliminate the Python service entirely. I evaluated this approach and chose a dedicated API instead:
+
+| Consideration | Python API (chosen) | n8n Data Tables |
+|---------------|---------------------|-----------------|
+| **Performance** | Fast — numpy vectorizes cosine similarity across 1536-dimension embeddings | Slow — JavaScript loops over every stored question |
+| **Testability** | High — `/check`, `/debug`, `/clusters` endpoints are independently testable | Low — logic buried in Code nodes, only testable through full workflow runs |
+| **Reusability** | Any client can call the API (Discord bot, CLI tool, web dashboard) | Locked to n8n |
+| **Scalability** | Can migrate to PostgreSQL + pgvector without touching the workflow | Hits a ceiling around 1000 questions |
+| **Deployment** | Two services to maintain | One service |
+| **Complexity** | Higher (separate repo, Dockerfile, Railway service) | Lower (everything in n8n) |
+
+For small-scale personal use (<100 questions), the n8n-only approach is viable and simpler. This project uses a dedicated API because the clustering logic benefits from Python's numerical libraries, and the clean API boundary makes the system easier to test, debug, and extend.
+
 ## Limitations & Future Work
 
 ### Current Limitations
