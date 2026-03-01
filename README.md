@@ -29,21 +29,31 @@ flowchart TD
 
     subgraph n8n["n8n Workflow (Railway)"]
         B[Slack Trigger]
-        C{Regex Filter\nhas '?' or question words}
-        D[LLM Question Filter\nAnthropic Claude]
+        C{"Regex Filter
+        has '?' or question words"}
+        D["LLM Question Filter
+        Anthropic Claude"]
         E{Genuine question?}
-        F[Cluster-Check\nPOST /check]
-        G{count ≥ 3 AND\nnot yet drafted?}
-        H[LLM FAQ Drafter\nAnthropic Claude]
-        I[Output-Format\nparse Question/Answer]
-        J[Notion API\nHTTP Request — create page]
-        K[Mark-Drafted\nPOST /mark-drafted]
+        F["Cluster-Check
+        POST /check"]
+        G{"count ≥ 3 AND
+        not yet drafted?"}
+        H["LLM FAQ Drafter
+        Anthropic Claude"]
+        I["Output-Format
+        parse Question/Answer"]
+        J["Notion API
+        HTTP Request — create page"]
+        K["Mark-Drafted
+        POST /mark-drafted"]
         L[Slack Notification]
     end
 
     subgraph API["Python API (Railway)"]
-        M[Generate Embedding\nOpenAI text-embedding-3-small]
-        N[Cosine Similarity\nthreshold: 0.70]
+        M["Generate Embedding
+        OpenAI text-embedding-3-small"]
+        N["Cosine Similarity
+        threshold: 0.70"]
         O[Cluster Assignment]
         P[(SQLite\nRailway Volume)]
     end
