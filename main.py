@@ -75,6 +75,7 @@ class QuestionResponse(BaseModel):
     cluster_id: int
     cluster_count: int
     similar_questions: list[str]
+    faq_drafted: bool = False
 
 
 @app.post("/check", response_model=QuestionResponse)
@@ -129,7 +130,7 @@ def check_question(question: QuestionInput):
         
         # Get cluster info
         cluster = conn.execute(
-            "SELECT count FROM clusters WHERE id = ?", (cluster_id,)
+            "SELECT count, faq_drafted FROM clusters WHERE id = ?", (cluster_id,)
         ).fetchone()
         
         similar = conn.execute(
@@ -141,7 +142,8 @@ def check_question(question: QuestionInput):
             status="matched",
             cluster_id=cluster_id,
             cluster_count=cluster[0],
-            similar_questions=[r[0] for r in similar]
+            similar_questions=[r[0] for r in similar],
+            faq_drafted=bool(cluster[1])
         )
     
     elif best_match and not best_match["cluster_id"]:
