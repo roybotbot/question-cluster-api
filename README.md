@@ -1,4 +1,4 @@
-# Question Cluster API
+# Automated Slack FAQ
 
 **Automatic FAQ generation from repeated Slack questions using semantic similarity clustering.**
 
