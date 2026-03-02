@@ -31,13 +31,21 @@ Paraphrased questions were not clustering together. The initial threshold of 0.8
 |----------|------------------|
 | "What time is the team meeting tomorrow?" | 0.1017 |
 
+## Score Ranges
+
+| Score | Meaning | Action |
+|-------|---------|--------|
+| ≥ 0.70 | Paraphrased questions (same intent, different wording) | Clustered together |
+| 0.55–0.70 | Related topic, different question (e.g., password vs email) | Not clustered |
+| < 0.55 | Unrelated questions | Not clustered |
+
 ## Decision
 **Set threshold to 0.70**
 
 Reasoning:
-- Paraphrased questions cluster in the 0.70-0.75 range
-- Different topics score below 0.55
-- Unrelated questions score < 0.15
+- Paraphrased questions score ≥ 0.70
+- Related but distinct questions fall in the 0.55–0.70 gap — close enough to seem similar, but different enough to warrant separate FAQ entries
+- Unrelated questions score well below 0.55
 - 0.70 captures natural paraphrasing while avoiding false matches
 
 ## Verification
