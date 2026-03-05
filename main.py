@@ -269,6 +269,17 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/questions")
+def list_questions():
+    """Temporary debug: list all stored questions."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, text, cluster_id, created_at FROM questions ORDER BY id"
+    ).fetchall()
+    conn.close()
+    return [{"id": r[0], "text": r[1], "cluster_id": r[2], "created_at": r[3]} for r in rows]
+
+
 
     
 @app.post("/reset", dependencies=[Depends(verify_admin_key)])
