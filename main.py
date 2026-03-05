@@ -291,9 +291,9 @@ def migrate_db():
     return {"status": "ok", "columns_added": added}
 
 
-@app.get("/questions")
+@app.get("/questions", dependencies=[Depends(verify_admin_key)])
 def list_questions():
-    """Temporary debug: list all stored questions."""
+    """List all stored questions. Useful for debugging clustering."""
     conn = get_db()
     rows = conn.execute(
         "SELECT id, text, cluster_id, created_at FROM questions ORDER BY id"
