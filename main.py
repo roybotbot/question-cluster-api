@@ -269,6 +269,24 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/migrate", dependencies=[Depends(verify_admin_key)])
+def migrate_db():
+    """One-time migration: add faq_url and faq_answer columns to clusters table."""
+    conn = get_db()
+    cursor = conn.execute("PRAGMA table_info(clusters)")
+    columns = {row[1] for row in cursor.fetchall()}
+    added = []
+    if "faq_url" not in columns:
+        conn.execute("ALTER TABLE clusters ADD COLUMN faq_url TEXT")
+        added.append("faq_url")
+    if "faq_answer" not in columns:
+        conn.execute("ALTER TABLE clusters ADD COLUMN faq_answer TEXT")
+        added.append("faq_answer")
+    conn.commit()
+    conn.close()
+    return {"status": "ok", "columns_added": added}
+
+
 @app.get("/questions")
 def list_questions():
     """Temporary debug: list all stored questions."""
